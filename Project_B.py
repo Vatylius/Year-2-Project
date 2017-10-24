@@ -43,15 +43,15 @@ class Ball:
     def get_patch(self):
         return self.__patch
 
-    def rad(self, other):
-        return [self.__rad, other.__rad]
+    def rad(self):
+        return self.__rad
 
     def time_to_collision(self, other):
-        r = other.pos() - self.pos()
+        r = self.pos() - other.pos()
         v = other.vel() - self.vel()
         rad1 = self.__rad
         rad2 = other.__rad
-        q = -np.dot(r, v) / np.dot(v, v)  # to shorten length of calculations
+        q = np.dot(r, v) / np.dot(v, v)  # to shorten length of calculations
         dt = -1.0
         # print('k_self: {}, k_other: {}'.format(self.k(), other.k()))
         if self.k() == 0 and other.k() == 0:
@@ -59,7 +59,7 @@ class Ball:
             # k = q * q - (np.dot(r, r) - 4) / np.dot(v, v)
             r_dot = np.dot(r, r)
             v_dot = np.dot(v, v)
-            k = q*q - (r_dot - (rad1 + rad2)**2) / v_dot
+            k = q * q - (r_dot - (rad1 + rad2) ** 2) / v_dot
             if k >= 0:
                 sq = np.sqrt(k)
                 dt = -q + sq
@@ -70,7 +70,7 @@ class Ball:
                 # else:
                 #     dt = dt2
         elif self.k() == 1 or other.k() == 1:
-            k = q * q - (np.dot(r, r) - (rad1 - rad2)**2) / np.dot(v, v)
+            k = q * q - (np.dot(r, r) - (rad1 - rad2) ** 2) / np.dot(v, v)
             if k >= 0:
                 sq = np.sqrt(k)
                 dt1 = q + sq
@@ -79,7 +79,7 @@ class Ball:
                     dt = dt1
                 else:
                     dt = dt2
-                # print (dt)
+                    # print (dt)
         # if dt1 >= 0:
         #     dt = dt1
         # elif dt2 >= 0:
@@ -152,17 +152,28 @@ class Ball:
                 i += 1
             c += 1
 
+    def distance_to_collision(self, other):
+        r = self.pos() - other.pos()
+        d = np.sqrt(np.dot(r, r))
+        if d < self.rad() + other.rad() + 0.1 and self.k() == 0 and other.k() == 0:
+            print(d)
+            return True
+        elif d > abs(self.rad() - other.rad()) - 0.1 and (self.k() == 1 or other.k() == 1):
+            return True
+        else:
+            return False
+
 
 class Balls:
     def __init__(self, n=1, r=1.0, u=1):
         i = 0
         self.__set = []
         while i < n:
-            vx, vy = np.random.uniform(-10., 10., 2)
+            vx, vy = np.random.uniform(-100., 100., 2)
             v = [vx, vy]
             if u == 0:
                 r = np.random.uniform(0.2, 1.5)
-            self.__ball = Ball(vel=v, rad=r, mass=r*r)
+            self.__ball = Ball(vel=v, rad=r, mass=r * r)
             self.__ball.pos_gen()
             self.__ball.pos_gen2(self.__set)
             if not self.__ball.pos()[1]:
@@ -178,10 +189,11 @@ class Balls:
 class Orbits:
     def __init__(self):
         self.__container = Ball(rad=10, k=1)
-        # self.__ball1 = Ball(pos=[-5, 0], vel=[0.2, 0], rad=1)
-        # self.__ball2 = Ball(pos=[5, 0], vel=[-0.2, 0], rad=1, clr='b')
-        balls = Balls(20, u=0)
+        # self.__ball1 = Ball(pos=[-5, 0], vel=[1000, 0], rad=1)
+        # self.__ball2 = Ball(pos=[5, 0], vel=[-80, 0], rad=1, clr='b')
+        balls = Balls(15)
         self.__balls = balls.data()
+        # self.__balls = []
         self.__balls.append(self.__container)
         # self.__balls.append(self.__ball1)
         # self.__balls.append(self.__ball2)
@@ -207,14 +219,15 @@ class Orbits:
             i = c
             while i < len(self.__balls):
                 dt = ball.time_to_collision(self.__balls[i])
-                if 0.0 <= dt <= 0.01 and ball.coll(self.__balls[i]):
+                if -0.001 <= dt <= 0.001 and ball.coll(self.__balls[i]):
+                # if ball.distance_to_collision(self.__balls[i]):
                     # print(dt)
                     # if ball.out(self.__balls[i]) < 0 and self.__balls[i].k() == 0:
                     ball.collide(self.__balls[i])
                 i += 1
             c += 1
         for b in self.__balls:
-            b.move(0.01)
+            b.move(0.001)
             patches.append(b.get_patch())
         return patches
 
