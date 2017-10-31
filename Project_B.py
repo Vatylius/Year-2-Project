@@ -78,9 +78,9 @@ class Ball:
                 # print('dt: {}, q: {}, r_dot: {}, v_dot: {}'.format(dt, q, r_dot, v_dot))
                 dt2 = -q - sq
                 if dt1 >= dt2:
-                    dt = dt1
+                    dt = -dt1
                 else:
-                    dt = dt2
+                    dt = -dt2
         elif self.k() == 1 or other.k() == 1:
             k = q * q - (np.dot(r, r) - (rad1 - rad2) ** 2) / np.dot(v, v)
             if k >= 0:
@@ -91,7 +91,6 @@ class Ball:
                     dt = dt1
                 else:
                     dt = dt2
-                    # print (dt)
         # if dt1 >= 0:
         #     dt = dt1
         # elif dt2 >= 0:
@@ -99,7 +98,6 @@ class Ball:
         return dt
 
     def collide(self, other):
-        # print(id(self), id(other))
         m1 = self.__mass
         m2 = other.__mass
         u1 = self.__vel
@@ -112,23 +110,29 @@ class Ball:
         u2_perp = u2 - u2_para * r / R
         v1_perp = u1_perp
         v2_perp = u2_perp
+        dp = 0              # Change in momentum
         if self.__k == 0 and other.__k == 0:
             v1_para = ((u1_para * (m1 - m2) + 2 * m2 * u2_para) / (m1 + m2) * r / R)
             v2_para = ((u2_para * (m2 - m1) + 2 * m1 * u1_para) / (m1 + m2) * r / R)
         elif self.__k == 1 or other.__k == 1:
             v1_para = -u1_para * r / R
             v2_para = -u2_para * r / R
+            if self.__k == 1:
+                dv = u2_para - np.linalg.norm(v2_para)
+                dp = m2*dv
+            else:
+                dv = np.linalg.norm(u1_para * r / R - v1_para)
+                dp = m1*dv
         v1 = v1_perp + v1_para
         v2 = v2_perp + v2_para
         self.__vel = v1
         other.__vel = v2
-        return [v1, v2]
+        return dp
 
     def coll(self, other):
         r = other.pos() - self.pos()
         v = other.vel() - self.vel()
         check = np.dot(r, v)
-        # print('o_pos: {}, s_pos: {}, o_vel: {}, s_vel: {} r: {}, v: {}, check: {}'.format(other.pos(), self.pos(), other.vel(), self.vel(), r, v, check))
         if check < 0 and self.k() == 0 and other.k() == 0:
             return True
         elif check > 0 and (self.k() == 1 or other.k() == 1):
@@ -149,7 +153,7 @@ class Ball:
 
         self.__pos = loc
 
-    def pos_gen2(self, data):
+    def pos_overlap_check(self, data):
         i = 0
         c = 0
         self.pos_gen()
@@ -182,13 +186,13 @@ class Balls:
         i = 0
         self.__set = []
         while i < n:
-            vx, vy = np.random.uniform(-100., 100., 2)
+            vx, vy = np.random.uniform(-3000., 3000., 2)
             v = [vx, vy]
             if u == 0:
-                r = np.random.uniform(0.2, 1.5)
-            self.__ball = Ball(vel=v, rad=r, mass=r * r)
+                r = np.random.uniform(0.05, 1.5)
+            self.__ball = Ball(vel=v, rad=r, mass=1)
             self.__ball.pos_gen()
-            self.__ball.pos_gen2(self.__set)
+            self.__ball.pos_overlap_check(self.__set)
             if not self.__ball.pos()[1]:
                 i += 1
             else:
@@ -211,28 +215,35 @@ class Balls:
         return ke
 
 class Orbits:
+    momentum = 0
+    
     def __init__(self):
         self.__container = Ball(rad=10, k=1)
-        # self.__ball1 = Ball(pos=[-5, 0], vel=[1000, 0], rad=1)
-        # self.__ball2 = Ball(pos=[5, 0], vel=[-80, 0], rad=1, clr='b')
-        self.__balls = Balls(50)
+        # self.__ball1 = Ball(pos=[-2, 0], vel=[100, 0], rad=1)
+        # self.__ball2 = Ball(pos=[2, 0], vel=[-80, 0], rad=1, clr='b')
+        self.__balls = Balls(100, r=0.2)
         self.__data = self.__balls.data()
         # self.__data = []
         self.__data.append(self.__container)
         # self.__data.append(self.__ball1)
         # self.__data.append(self.__ball2)
         self.__n = 0
-        self.__p = 0
-        self.__ke = 0
+        # self.__p = 0
+        # self.__ke = 0
         self.__text0 = None
+        self.__frame_interval = 1    # milliseconds
+        self.__P = 0
+    
+    def frame_interval(self):
+        return self.__frame_interval
         
     def init_figure(self):
         big_circ = plt.Circle((0, 0), 10, ec='b', fill=False, ls='solid')
         ax1.add_artist(big_circ)
         self.__text0 = ax1.text(-9.9, 9, "f={:4d}".format(0, fontsize=12))
         self.__n = ax1.text(-9.9, 8, "n={:4d}".format(len(self.__data), fontsize=12))
-        self.__p = ax1.text(-9.9, -9, "p={:06.2f}".format(self.__balls.p(), fontsize=12))
-        self.__ke = ax1.text(-9.9, -9.9, "ke={:06.2f}".format(self.__balls.energy(), fontsize=12))
+        # self.__p = ax1.text(-9.9, -9, "p={:06.2f}".format(self.__balls.p(), fontsize=12))
+        # self.__ke = ax1.text(-9.9, -9.9, "ke={:06.2f}".format(self.__balls.energy(), fontsize=12))
         patches = [self.__text0]
         for b in self.__data:
             pch = b.get_patch()
@@ -243,46 +254,57 @@ class Orbits:
     def next_frame(self, framenumber):
         self.__text0.set_text("f={:4d}".format(framenumber))
         patches = [self.__text0]
-        self.__ke.set_text("ke={:06.2f}".format(self.__balls.energy()))
-        self.__p.set_text("p={:06.2f}".format(self.__balls.p()))
+        # self.__ke.set_text("ke={:06.2f}".format(self.__balls.energy()))
+        # self.__p.set_text("p={:06.2f}".format(self.__balls.p()))
         c = 1
         # if (framenumber % 100) == 0:
             # print(self.__balls.energy())
         for ball in self.__data:
             i = c
+            
             while i < len(self.__data):
-                # dt = ball.time_to_collision(self.__data[i])
-                # if 0 < dt <= 0.002 and ball.coll(self.__data[i]):
-                if ball.distance_to_collision(self.__data[i]) and ball.coll(self.__data[i]):
+                dt = ball.time_to_collision(self.__data[i])
+                if 0 < dt <= 0.0001 and ball.coll(self.__data[i]):
+                # if ball.distance_to_collision(self.__data[i]) and ball.coll(self.__data[i]):
                     # print(dt)
                     # if ball.out(self.__data[i]) < 0 and self.__data[i].k() == 0:
-                    ball.collide(self.__data[i])
+                    
+                    dp = ball.collide(self.__data[i])
+                    Orbits.momentum += dp
                 i += 1
             c += 1
         for b in self.__data:
-            b.move(0.001)
+            b.move(0.0001)
             patches.append(b.get_patch())
+        if framenumber % 100 == 0 and framenumber != 0:
+            dt = (self.__frame_interval/1000) * 100
+            r = self.__container.rad()
+            self.__P = Orbits.momentum/(dt*np.pi*2*r)    # Pressure given in N/m
+            print(self.__P)
+            self.__P = 0
+            Orbits.momentum = 0
         return patches
 
 
 if __name__ == "__main__":
     fig = plt.figure()
-    ax1 = fig.add_subplot(211)
-    ax2 = fig.add_subplot(212)
+    ax1 = fig.add_subplot(111)
+    # ax2 = fig.add_subplot(212)
     ax1.set_xlim(-10, 10)
     ax1.set_ylim(-10, 10)
     ax1.axes.set_aspect('equal')
+    '''
     ax2.set_xlim(0, 300)
     ax2.set_ylim(0, 150)
     ax2.axes.set_aspect('equal')
-
+    '''
     movie = Orbits()
 
     anim = animation.FuncAnimation(fig,
                                    movie.next_frame,
                                    init_func=movie.init_figure,
                                    # frames = 1000,
-                                   interval=10,
+                                   interval=movie.frame_interval(),
                                    blit=True)
 
     plt.show()
